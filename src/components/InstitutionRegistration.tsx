@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Building2, CheckCircle, AlertCircle, Copy } from 'lucide-react';
+import { Building2, CheckCircle, AlertCircle, Copy, Wallet } from 'lucide-react';
 import { supabase } from '../utils/supabase';
+import { connectWallet } from '../utils/blockchain';
 
 interface RegistrationFormData {
   institutionName: string;
@@ -32,6 +33,7 @@ export default function InstitutionRegistration() {
   const [existingRequests, setExistingRequests] = useState<RegistrationRequest[]>([]);
   const [error, setError] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [connectingWallet, setConnectingWallet] = useState(false);
 
   const fetchExistingRequests = async () => {
     try {
@@ -109,6 +111,23 @@ export default function InstitutionRegistration() {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
+  const handleConnectWallet = async () => {
+    setConnectingWallet(true);
+    setError('');
+    try {
+      const address = await connectWallet();
+      if (address) {
+        setFormData(prev => ({ ...prev, walletAddress: address }));
+      } else {
+        setError('Failed to connect wallet. Please make sure MetaMask is installed.');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to connect wallet');
+    } finally {
+      setConnectingWallet(false);
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'approved':
@@ -165,17 +184,28 @@ export default function InstitutionRegistration() {
 
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">Ethereum Wallet Address</label>
-              <input
-                type="text"
-                name="walletAddress"
-                value={formData.walletAddress}
-                onChange={handleInputChange}
-                placeholder="0x..."
-                required
-                pattern="0x[a-fA-F0-9]{40}"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
-              />
-              <p className="text-xs text-gray-500 mt-1">Must be a valid Ethereum address (0x...)</p>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  name="walletAddress"
+                  value={formData.walletAddress}
+                  onChange={handleInputChange}
+                  placeholder="0x..."
+                  required
+                  pattern="0x[a-fA-F0-9]{40}"
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+                />
+                <button
+                  type="button"
+                  onClick={handleConnectWallet}
+                  disabled={connectingWallet}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center whitespace-nowrap"
+                >
+                  <Wallet className="w-4 h-4 mr-2" />
+                  {connectingWallet ? 'Connecting...' : 'Connect'}
+                </button>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">Must be a valid Ethereum address (0x...) or click Connect to use your MetaMask wallet</p>
             </div>
 
             <div>
