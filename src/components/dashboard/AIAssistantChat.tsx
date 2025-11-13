@@ -192,11 +192,15 @@ Expired or revoked checks still count.`,
 4. **Frontend** – private keys never leave wallet, CSP, input validation
 5. **IPFS** – content-addressed, distributed, tamper-proof`,
 
-  'who owns the credential data': `The **student** owns the NFT (soulbound token) and controls sharing.  
+    'who owns the credential data': `The **student** owns the NFT (soulbound token) and controls sharing.  
 Institutions own the right to revoke.  
 Platform stores only hashes and metadata needed for verification.`,
 
-  'is the platform gd
+  'is the platform gdpr compliant': `Yes:
+- Students can revoke credentials (right to be forgotten)
+- Share links are time-limited
+- Personal data is encrypted at rest
+- Audit logs available for data access requests`,
 
 pr compliant': `Yes:
 - Students can revoke credentials (right to be forgotten)
