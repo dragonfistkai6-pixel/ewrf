@@ -39,6 +39,14 @@ interface ChartDataPoint {
   shared: number;
 }
 
+interface RecentActivity {
+  id: string;
+  action: string;
+  actor_address: string;
+  metadata: any;
+  created_at: string;
+}
+
 interface OperationsDashboardProps {
   onBack?: () => void;
 }
@@ -56,6 +64,7 @@ export default function OperationsDashboard({ onBack }: OperationsDashboardProps
     trends: { credentials: 0, institutions: 0, verifications: 0, health: 0 }
   });
   const [chartData, setChartData] = useState<ChartDataPoint[]>([]);
+  const [recentActivities, setRecentActivities] = useState<RecentActivity[]>([]);
   const [timeRange, setTimeRange] = useState<'week' | 'month' | 'year'>('week');
   const [loading, setLoading] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -82,12 +91,13 @@ export default function OperationsDashboard({ onBack }: OperationsDashboardProps
 
   const loadDashboardData = async () => {
     try {
-      const [credentials, institutions, auditLogs, shares, students] = await Promise.all([
+      const [credentials, institutions, auditLogs, shares, students, recentLogs] = await Promise.all([
         supabase.from('credentials').select('*'),
         getUniqueInstitutions(),
         supabase.from('audit_logs').select('*'),
         supabase.from('credential_shares').select('*'),
-        supabase.from('student_profiles').select('wallet_address')
+        supabase.from('student_profiles').select('wallet_address'),
+        supabase.from('audit_logs').select('*').order('created_at', { ascending: false }).limit(10)
       ]);
 
       const totalCreds = credentials.data?.length || 0;
@@ -122,6 +132,7 @@ export default function OperationsDashboard({ onBack }: OperationsDashboardProps
       });
 
       setChartData(chartPoints);
+      setRecentActivities(recentLogs.data || []);
     } catch (error) {
       console.error('Error loading dashboard data:', error);
     } finally {
@@ -204,6 +215,37 @@ export default function OperationsDashboard({ onBack }: OperationsDashboardProps
     return 'text-gray-400';
   };
 
+  const getActivityIcon = (action: string) => {
+    switch (action) {
+      case 'issued':
+        return { icon: Award, color: 'bg-green-500/20', iconColor: 'text-green-400', label: 'Credential Issued' };
+      case 'verified':
+        return { icon: FileCheck, color: 'bg-blue-500/20', iconColor: 'text-blue-400', label: 'Verification Completed' };
+      case 'shared':
+        return { icon: Share, color: 'bg-purple-500/20', iconColor: 'text-purple-400', label: 'Credential Shared' };
+      case 'revoked':
+        return { icon: XCircle, color: 'bg-red-500/20', iconColor: 'text-red-400', label: 'Credential Revoked' };
+      default:
+        return { icon: Activity, color: 'bg-gray-500/20', iconColor: 'text-gray-400', label: 'System Event' };
+    }
+  };
+
+  const getTimeAgo = (dateString: string) => {
+    const now = new Date();
+    const past = new Date(dateString);
+    const diffMs = now.getTime() - past.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins} min ago`;
+
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+
+    const diffDays = Math.floor(diffHours / 24);
+    return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+  };
+
   const statCards = [
     {
       label: 'Total Credentials',
@@ -262,8 +304,7 @@ export default function OperationsDashboard({ onBack }: OperationsDashboardProps
               </button>
             )}
             {[
-              { name: 'Dashboard', icon: Activity, view: 'dashboard' },
-              { name: 'Insights', icon: TrendingUp, view: 'institutions' }
+              { name: 'Dashboard', icon: Activity, view: 'dashboard' }
             ].map((item) => (
               <button
                 key={item.name}
@@ -302,133 +343,6 @@ export default function OperationsDashboard({ onBack }: OperationsDashboardProps
           </header>
 
           <main className="p-4 lg:p-8">
-            {activeView === 'institutions' && (
-              <>
-                <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-2xl border border-gray-700 p-8 mb-8 animate-fade-in">
-                  <div className="flex items-center justify-between mb-6">
-                    <div>
-                      <h2 className="text-3xl font-bold text-white mb-2">Platform Insights</h2>
-                      <p className="text-gray-400">Real-time overview of credential ecosystem</p>
-                    </div>
-                    <TrendingUp className="w-12 h-12 text-blue-400 opacity-30" />
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                    <div className="bg-gray-900/50 backdrop-blur-sm rounded-xl border border-gray-700 p-6 hover:border-blue-500/50 transition-all">
-                      <div className="flex items-center space-x-3 mb-4">
-                        <div className="p-3 bg-blue-500/20 rounded-lg">
-                          <FileText className="w-6 h-6 text-blue-400" />
-                        </div>
-                        <span className="text-gray-400 text-sm">Total Credentials</span>
-                      </div>
-                      <p className="text-3xl font-bold text-white">{stats.totalCredentials}</p>
-                      <p className="text-xs text-gray-500 mt-2">Lifetime issued</p>
-                    </div>
-
-                    <div className="bg-gray-900/50 backdrop-blur-sm rounded-xl border border-gray-700 p-6 hover:border-green-500/50 transition-all">
-                      <div className="flex items-center space-x-3 mb-4">
-                        <div className="p-3 bg-green-500/20 rounded-lg">
-                          <Users className="w-6 h-6 text-green-400" />
-                        </div>
-                        <span className="text-gray-400 text-sm">Active Students</span>
-                      </div>
-                      <p className="text-3xl font-bold text-white">{stats.activeStudents}</p>
-                      <p className="text-xs text-gray-500 mt-2">Registered profiles</p>
-                    </div>
-
-                    <div className="bg-gray-900/50 backdrop-blur-sm rounded-xl border border-gray-700 p-6 hover:border-purple-500/50 transition-all">
-                      <div className="flex items-center space-x-3 mb-4">
-                        <div className="p-3 bg-purple-500/20 rounded-lg">
-                          <Share className="w-6 h-6 text-purple-400" />
-                        </div>
-                        <span className="text-gray-400 text-sm">Total Shares</span>
-                      </div>
-                      <p className="text-3xl font-bold text-white">{stats.totalShares}</p>
-                      <p className="text-xs text-gray-500 mt-2">Credentials shared</p>
-                    </div>
-
-                    <div className="bg-gray-900/50 backdrop-blur-sm rounded-xl border border-gray-700 p-6 hover:border-orange-500/50 transition-all">
-                      <div className="flex items-center space-x-3 mb-4">
-                        <div className="p-3 bg-orange-500/20 rounded-lg">
-                          <Shield className="w-6 h-6 text-orange-400" />
-                        </div>
-                        <span className="text-gray-400 text-sm">Active Institutions</span>
-                      </div>
-                      <p className="text-3xl font-bold text-white">{stats.activeInstitutions}</p>
-                      <p className="text-xs text-gray-500 mt-2">Authorized partners</p>
-                    </div>
-
-                    <div className="bg-gray-900/50 backdrop-blur-sm rounded-xl border border-gray-700 p-6 hover:border-red-500/50 transition-all">
-                      <div className="flex items-center space-x-3 mb-4">
-                        <div className="p-3 bg-red-500/20 rounded-lg">
-                          <XCircle className="w-6 h-6 text-red-400" />
-                        </div>
-                        <span className="text-gray-400 text-sm">Revoked Credentials</span>
-                      </div>
-                      <p className="text-3xl font-bold text-white">{stats.revokedCredentials}</p>
-                      <p className="text-xs text-gray-500 mt-2">Security actions taken</p>
-                    </div>
-
-                    <div className="bg-gray-900/50 backdrop-blur-sm rounded-xl border border-gray-700 p-6 hover:border-cyan-500/50 transition-all">
-                      <div className="flex items-center space-x-3 mb-4">
-                        <div className="p-3 bg-cyan-500/20 rounded-lg">
-                          <Clock className="w-6 h-6 text-cyan-400" />
-                        </div>
-                        <span className="text-gray-400 text-sm">Avg Response Time</span>
-                      </div>
-                      <p className="text-3xl font-bold text-white">{stats.avgResponseTime}ms</p>
-                      <p className="text-xs text-gray-500 mt-2">System performance</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-                  <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-2xl border border-gray-700 p-8 animate-fade-in">
-                    <div className="flex items-center space-x-3 mb-6">
-                      <Flame className="w-6 h-6 text-orange-400" />
-                      <h3 className="text-2xl font-bold text-white">Growth Trends</h3>
-                    </div>
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between p-4 bg-gray-900/50 rounded-lg">
-                        <span className="text-gray-400">Credential Issuance Rate</span>
-                        <span className="text-green-400 font-semibold">+{Math.max(1, stats.trends.credentials)}%</span>
-                      </div>
-                      <div className="flex items-center justify-between p-4 bg-gray-900/50 rounded-lg">
-                        <span className="text-gray-400">Institution Growth</span>
-                        <span className="text-green-400 font-semibold">+{Math.max(0, stats.trends.institutions)}%</span>
-                      </div>
-                      <div className="flex items-center justify-between p-4 bg-gray-900/50 rounded-lg">
-                        <span className="text-gray-400">Verification Trend</span>
-                        <span className="text-green-400 font-semibold">+{Math.max(1, stats.trends.verifications)}%</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-2xl border border-gray-700 p-8 animate-fade-in">
-                    <div className="flex items-center space-x-3 mb-6">
-                      <Target className="w-6 h-6 text-blue-400" />
-                      <h3 className="text-2xl font-bold text-white">System Performance</h3>
-                    </div>
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between p-4 bg-gray-900/50 rounded-lg">
-                        <span className="text-gray-400">System Uptime</span>
-                        <span className="text-green-400 font-semibold">99.8%</span>
-                      </div>
-                      <div className="flex items-center justify-between p-4 bg-gray-900/50 rounded-lg">
-                        <span className="text-gray-400">Blockchain Health</span>
-                        <span className="text-green-400 font-semibold">{stats.systemHealth}%</span>
-                      </div>
-                      <div className="flex items-center justify-between p-4 bg-gray-900/50 rounded-lg">
-                        <span className="text-gray-400">Network Latency</span>
-                        <span className="text-green-400 font-semibold">{stats.avgResponseTime}ms</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <LeaderboardWidget />
-              </>
-            )}
             {activeView === 'dashboard' && (
               <>
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
@@ -523,7 +437,7 @@ export default function OperationsDashboard({ onBack }: OperationsDashboardProps
                 <div className="flex items-center justify-between mb-6">
                   <div>
                     <h2 className="text-xl font-bold text-white">Recent Activity</h2>
-                    <p className="text-sm text-gray-400 mt-1">Latest credential operations</p>
+                    <p className="text-sm text-gray-400 mt-1">Latest credential operations from database</p>
                   </div>
                   <div className="p-3 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-xl">
                     <Activity className="w-5 h-5 text-white" />
@@ -531,71 +445,53 @@ export default function OperationsDashboard({ onBack }: OperationsDashboardProps
                 </div>
 
                 <div className="space-y-3">
-                  <div className="flex items-center space-x-3 p-3 rounded-lg bg-gray-700 hover:bg-gray-600 transition-all">
-                    <div className="w-10 h-10 bg-green-500/20 rounded-full flex items-center justify-center flex-shrink-0">
-                      <Award className="w-5 h-5 text-green-400" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center space-x-2">
-                        <span className="text-sm font-semibold text-white">Credential Issued</span>
-                        <span className="px-2 py-0.5 bg-green-500/20 text-green-400 text-xs font-bold rounded">NEW</span>
+                  {loading ? (
+                    Array.from({ length: 5 }).map((_, i) => (
+                      <div key={i} className="flex items-center space-x-3 p-3 rounded-lg bg-gray-700 animate-pulse">
+                        <div className="w-10 h-10 bg-gray-600 rounded-full flex-shrink-0"></div>
+                        <div className="flex-1 space-y-2">
+                          <div className="h-4 bg-gray-600 rounded w-3/4"></div>
+                          <div className="h-3 bg-gray-600 rounded w-1/2"></div>
+                        </div>
                       </div>
-                      <div className="flex items-center space-x-3 mt-1">
-                        <span className="text-xs text-gray-400">Token ID: #{stats.totalCredentials}</span>
-                        <span className="text-xs text-gray-500">2 min ago</span>
-                      </div>
+                    ))
+                  ) : recentActivities.length === 0 ? (
+                    <div className="text-center py-8 text-gray-400">
+                      <Activity className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                      <p className="text-sm">No recent activity</p>
                     </div>
-                  </div>
+                  ) : (
+                    recentActivities.map((activity) => {
+                      const activityConfig = getActivityIcon(activity.action);
+                      const Icon = activityConfig.icon;
 
-                  <div className="flex items-center space-x-3 p-3 rounded-lg bg-gray-700 hover:bg-gray-600 transition-all">
-                    <div className="w-10 h-10 bg-blue-500/20 rounded-full flex items-center justify-center flex-shrink-0">
-                      <FileCheck className="w-5 h-5 text-blue-400" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <span className="text-sm font-semibold text-white block">Verification Completed</span>
-                      <span className="text-xs text-gray-400 mt-1 block">By employer</span>
-                    </div>
-                    <span className="text-xs text-gray-500">5 min ago</span>
-                  </div>
-
-                  <div className="flex items-center space-x-3 p-3 rounded-lg bg-gray-700 hover:bg-gray-600 transition-all">
-                    <div className="w-10 h-10 bg-purple-500/20 rounded-full flex items-center justify-center flex-shrink-0">
-                      <Share className="w-5 h-5 text-purple-400" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <span className="text-sm font-semibold text-white block">Credential Shared</span>
-                      <span className="text-xs text-gray-400 mt-1 block">With 3rd party</span>
-                    </div>
-                    <span className="text-xs text-gray-500">12 min ago</span>
-                  </div>
-
-                  <div className="flex items-center space-x-3 p-3 rounded-lg bg-gray-700 hover:bg-gray-600 transition-all">
-                    <div className="w-10 h-10 bg-orange-500/20 rounded-full flex items-center justify-center flex-shrink-0">
-                      <Users className="w-5 h-5 text-orange-400" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <span className="text-sm font-semibold text-white block">New Student Registered</span>
-                      <span className="text-xs text-gray-400 mt-1 block">Profile created</span>
-                    </div>
-                    <span className="text-xs text-gray-500">18 min ago</span>
-                  </div>
-
-                  <div className="flex items-center space-x-3 p-3 rounded-lg bg-gray-700 hover:bg-gray-600 transition-all">
-                    <div className="w-10 h-10 bg-cyan-500/20 rounded-full flex items-center justify-center flex-shrink-0">
-                      <Shield className="w-5 h-5 text-cyan-400" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <span className="text-sm font-semibold text-white block">Institution Authorized</span>
-                      <span className="text-xs text-gray-400 mt-1 block">New partner added</span>
-                    </div>
-                    <span className="text-xs text-gray-500">1 hour ago</span>
-                  </div>
+                      return (
+                        <div key={activity.id} className="flex items-center space-x-3 p-3 rounded-lg bg-gray-700 hover:bg-gray-600 transition-all">
+                          <div className={`w-10 h-10 ${activityConfig.color} rounded-full flex items-center justify-center flex-shrink-0`}>
+                            <Icon className={`w-5 h-5 ${activityConfig.iconColor}`} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <span className="text-sm font-semibold text-white block">{activityConfig.label}</span>
+                            <div className="flex items-center space-x-2 mt-1">
+                              <span className="text-xs text-gray-400 truncate">
+                                {activity.actor_address ? `${activity.actor_address.slice(0, 8)}...${activity.actor_address.slice(-6)}` : 'System'}
+                              </span>
+                              {activity.metadata?.tokenId && (
+                                <span className="text-xs text-gray-500">• Token #{activity.metadata.tokenId}</span>
+                              )}
+                            </div>
+                          </div>
+                          <span className="text-xs text-gray-500 flex-shrink-0">{getTimeAgo(activity.created_at)}</span>
+                        </div>
+                      );
+                    })
+                  )}
                 </div>
 
                 <div className="mt-4 pt-4 border-t border-gray-700">
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-400">Total Events Today</span>
-                    <span className="text-white font-semibold">{Math.floor(stats.totalCredentials * 0.3)} events</span>
+                    <span className="text-gray-400">Total Activities Tracked</span>
+                    <span className="text-white font-semibold">{recentActivities.length} recent</span>
                   </div>
                 </div>
               </div>
