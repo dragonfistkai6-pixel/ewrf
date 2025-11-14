@@ -37,13 +37,12 @@ export default function InstitutionRegistration() {
 
   const fetchExistingRequests = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!formData.email) return;
 
       const { data, error } = await supabase
         .from('institution_authorization_requests')
         .select('*')
-        .eq('email', user.email)
+        .eq('email', formData.email)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -59,9 +58,8 @@ export default function InstitutionRegistration() {
     setError('');
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        setError('You must be logged in to submit a request');
+      if (!formData.email || !formData.walletAddress || !formData.institutionName) {
+        setError('Please fill in all required fields');
         setLoading(false);
         return;
       }
@@ -71,7 +69,7 @@ export default function InstitutionRegistration() {
         .insert([{
           institution_name: formData.institutionName,
           wallet_address: formData.walletAddress,
-          email: user.email,
+          email: formData.email,
           phone: formData.phone,
           description: formData.description
         }]);
@@ -79,17 +77,19 @@ export default function InstitutionRegistration() {
       if (submitError) throw submitError;
 
       setSubmitted(true);
-      setFormData({
-        institutionName: '',
-        walletAddress: '',
-        email: '',
-        phone: '',
-        description: ''
-      });
 
       fetchExistingRequests();
 
-      setTimeout(() => setSubmitted(false), 5000);
+      setTimeout(() => {
+        setSubmitted(false);
+        setFormData({
+          institutionName: '',
+          walletAddress: '',
+          email: '',
+          phone: '',
+          description: ''
+        });
+      }, 5000);
     } catch (err: any) {
       setError(err.message || 'Failed to submit registration. Please try again.');
     } finally {
@@ -248,13 +248,25 @@ export default function InstitutionRegistration() {
             />
           </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {loading ? 'Submitting...' : 'Submit Authorization Request'}
-          </button>
+          <div className="space-y-3">
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {loading ? 'Submitting...' : 'Submit Authorization Request'}
+            </button>
+
+            {formData.email && !submitted && (
+              <button
+                type="button"
+                onClick={fetchExistingRequests}
+                className="w-full bg-gray-100 text-gray-700 py-2 rounded-lg font-medium hover:bg-gray-200 transition-colors text-sm"
+              >
+                Check My Previous Requests
+              </button>
+            )}
+          </div>
         </form>
       </div>
 
